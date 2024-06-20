@@ -820,6 +820,7 @@ app.post('/api/only_v3/p2pcreate', async (req, res) => {
   console.log(hey)
   return res.send(hey)
 })
+// rm few stuff on the vercel.json file
 
 
 app.post('/api/loan', async (req, res) => {
