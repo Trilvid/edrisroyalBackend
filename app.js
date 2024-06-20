@@ -636,7 +636,9 @@ app.post('/api/fundwallet', async (req, res) => {
 //     return res.json({ status: 400 })
 //   }
 // })
-
+app.get('/', (req, res) => {
+  return res.send("hello there")
+})
 
 app.post('/api/deleteUser', async (req, res) => {
   try {
