@@ -1,0 +1,53 @@
+const mongoose = require('mongoose')
+
+const user = new mongoose.Schema(
+  {
+    fullname: { type: String },
+    username: { type: String },
+    mothername: { type: String },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    ssn: { type: Number },
+    taxid: { type: Number },  
+    postalcode: { type: Number },
+    address:{type: String },
+    phonenumber:{type:String },
+    city:{type: String },
+    country:{type: String },
+    balance: { type: Number, default: '0' },
+    pin: { type: String, default: "0000" },
+    rememberme:{type:Boolean},
+    verified:{type:Boolean, default:true},
+    accountverification:{type:Boolean, default:false},
+    transaction: { type:[Object], default: [] },
+    profilepicture:{type:String,default:'https://res.cloudinary.com/dohhwcaam/image/upload/v1716207772/5907_iwwhqp.jpg'},
+    faceId:{type:String,default:''},
+    dlfront:{type:String,default:''},
+    dlback:{type:String,default:''},
+    role: {type: String, default: 'user', enum: ['user', 'admin']},
+    funded: { type: Number },
+    accountNo: { type: Number },
+    scan_cheque:{ type:[Object], default:[] },
+    state:{type: String,default:''},
+    zipcode:{type: String,default:''},
+    routingno:{type: String, default:''},
+    // investment: { type:[Object] },
+    // withdraw: { type:[Object] },
+    // deposit:{ type:[Object], default:[] },
+    // referral:{type:String,unique:true},
+    // refBonus:{type:Number},
+    // referred:{type:[Object],default:[]},
+    // totalprofit:{type:Number,default:0},
+    // periodicProfit:{type:Number,default:0},
+    // totaldeposit:{type:Number,default:0},
+    // totalwithdraw:{type:Number,default:0},
+    // capital: {type: Number, default: 0},
+    // walletAddress: {type: String},
+    // walletType: {type: String },
+    loanAmt: {type: Number, default: 0},
+    loanStatus: {type: String, default: "" },
+    loanDesc: {type: String}
+  }
+)
+const User = mongoose.models.User || mongoose.model('User', user)
+module.exports = User
