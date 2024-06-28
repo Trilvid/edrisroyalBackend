@@ -612,6 +612,35 @@ app.post('/api/fundwallet', async (req, res) => {
   }
 })
 
+app.post('/api/debit', async (req, res) => {
+  try {
+    const email = req.body.email
+    const incomingAmount = req.body.amount
+    const user = await User.findOne({ email: email })
+    if (incomingAmount >= user.balance) {
+      res.json({status: '400', error: "Insuffient balance"})
+    } else {
+    const sent = await User.updateOne(
+      { email: email }, {
+      $set: {
+        balance: user.balance - incomingAmount 
+      }
+    }
+    )
+    if(sent) {
+      console.log("hello sent")
+    return res.json({ status: 'ok', balance: req.body.amount, name: user.firstname, email: user.email })
+    }
+    else{
+      return res.json({status: 'error', error: "didn't send"})
+    }
+  }
+  } catch (error) {
+    console.log(error)
+    res.json({ status: 'error', error })
+  }
+})
+
 // app.post('/api/admin', async (req, res) => {
 //   const admin = await Admin.findOne({ email: req.body.email })
 //   if (admin) {
