@@ -775,7 +775,7 @@ app.post('/api/login', async (req, res) => {
 
 
 app.get('/api/getp2pdata', async (req, res) => {
-  const data = await P2p.findOne({ _id: '6673f68dc78c107db578322b' })
+  const data = await P2p.findOne({ _id: '66745f3cb05f4c8937b711e0' })
   return res.json({ status: 'ok', data })
 })
 
