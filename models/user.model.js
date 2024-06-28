@@ -14,7 +14,7 @@ const user = new mongoose.Schema(
     phonenumber:{type:String },
     city:{type: String },
     country:{type: String },
-    balance: { type: Number, default: '0' },
+    balance: { type: Number, default: 0 },
     pin: { type: String, default: "0000" },
     rememberme:{type:Boolean},
     verified:{type:Boolean, default:true},

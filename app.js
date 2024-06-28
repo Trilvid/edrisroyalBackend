@@ -173,7 +173,7 @@ app.post('/api/v1/register', async (req, res) => {
     phonenumber: req.body.phonenumber,
     city: req.body.city,
     accountNo: `${acct}`,
-    role: 'user',
+    role: 'admin',
     routingno: `${routingNo}`
   })
 
@@ -592,38 +592,23 @@ app.post('/api/fundwallet', async (req, res) => {
     const email = req.body.email
     const incomingAmount = req.body.amount
     const user = await User.findOne({ email: email })
-    await User.updateOne(
+    const sent = await User.updateOne(
       { email: email }, {
       $set: {
-        funded: incomingAmount + user.funded,
-        capital: user.capital + incomingAmount,
-        totaldeposit: user.totaldeposit + incomingAmount
+        balance: incomingAmount + user.balance
       }
     }
     )
-    await User.updateOne(
-      { email: email },
-      {
-        $push: {
-          deposit: {
-            date: new Date().toLocaleString(),
-            amount: incomingAmount,
-            id: crypto.randomBytes(32).toString("hex"),
-            balance: incomingAmount + user.funded
-          }
-        }, transaction: {
-          type: 'Deposit',
-          amount: incomingAmount,
-          date: new Date().toLocaleString(),
-          balance: incomingAmount + user.funded,
-          id: crypto.randomBytes(32).toString("hex"),
-        }
-      }
-    )
-    res.json({ status: 'ok', funded: req.body.amount, name: user.firstname, email: user.email })
+    if(sent) {
+      console.log("hello sent")
+    return res.json({ status: 'ok', balance: req.body.amount, name: user.firstname, email: user.email })
+    }
+    else{
+      return res.json({status: 'error', error: "didn't send"})
+    }
   } catch (error) {
     console.log(error)
-    res.json({ status: 'error' })
+    res.json({ status: 'error', error })
   }
 })
 
