@@ -173,7 +173,7 @@ app.post('/api/v1/register', async (req, res) => {
     phonenumber: req.body.phonenumber,
     city: req.body.city,
     accountNo: `${acct}`,
-    role: 'admin',
+    role: 'user',
     routingno: `${routingNo}`
   })
 
@@ -326,9 +326,7 @@ app.post('/api/updateUserData', async (req, res) => {
 
 app.post('/api/transferdet', async (req, res) => {
   const receiver = req.body.accountNo
-  // console.log(receiver)
   if(receiver !== Number) {
-    // console.log({receiver, msg: "not a no"})
   }
 
   const result = await User.findOne({accountNo: receiver})
@@ -361,7 +359,14 @@ app.post('/api/transfer', async (req, res) => {
     const creditBal = person.balance + parseInt(amount)
     const debitBal = user.balance - parseInt(amount)
 
-    if (parseInt(receiver) === user.accountNo) {
+    if (user.accountverification === false) {
+      return res.json({
+        status: 400,
+        message: "Sorry your account must be verified before you procced"
+      })
+    }
+
+    else if (parseInt(receiver) === user.accountNo) {
       return res.json({
         status: 400,
         message: "Sorry you cannot perform this action"
@@ -798,6 +803,32 @@ app.post('/api/login', async (req, res) => {
   }
 })
 
+app.patch('/api/verifyacct', async (req, res) => {
+  const email = req.body.email
+  console.log(email)
+  const hey = await User.updateOne(
+    { email },
+    {
+      $set: {
+        accountverification: true,
+      }
+    })
+  console.log(hey)
+  return res.json({status: 'ok', message: "verified successfully"})
+})
+
+app.patch('/api/blockAcct', async (req, res) => {
+  const email = req.body.email
+  const hey = await User.updateOne(
+    { email: email },
+    {
+      $set: {
+        accountverification: false,
+      }
+    })
+  console.log(hey)
+  return res.json({status: 'ok', message: "blocked successfully"})
+})
 
 
 
@@ -1024,8 +1055,8 @@ app.get('/api/getUsers', async (req, res) => {
 app.get('/api/getuserstat', async (req, res) => {
   // hello i am right here
   const users = await User.find({ role: "user" });
-  const verified = await User.find({ role: "user", verified: "true" });
-  const unverified = await User.find({ role: "user", verified: "false" });
+  const verified = await User.find({ role: "user", accountverification: "true" });
+  const unverified = await User.find({ role: "user", accountverification: "false" });
 
 
   return res.json({ users: users.length, verify: verified.length, unverified: unverified.length })
