@@ -405,7 +405,7 @@ app.post('/api/transfer', async (req, res) => {
               type: 'credit',
               amount: req.body.amount,
               date: now.toLocaleString(),
-              balance: user.balance + amount,
+              balance: person.balance + parseInt(amount),
               id: crypto.randomBytes(8).toString('hex'),
             },
           },
