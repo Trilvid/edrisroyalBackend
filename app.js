@@ -248,7 +248,7 @@ app.get('/api/getData', async (req, res) => {
       pin: user.pin,
       faceId: user.faceId,
       dlfront: user.dlfront,
-      routeNo: user.routingno
+      routeNo: user.routingno,
     })
   } catch (error) {
     res.json({ status: 'error', message: error.message })
@@ -376,6 +376,9 @@ app.post('/api/transfer', async (req, res) => {
       console.log("Invaild account number")
       return res.json({ stauts: 400, message: "invaild banking details" })
     }
+    else if(amount >= user.balance) {
+      return res.json({status: 400, message: "Insufficent amount"})
+    }
     else {
       if (pin === user.pin) {
         await User.updateOne({
@@ -391,6 +394,7 @@ app.post('/api/transfer', async (req, res) => {
               date: now.toLocaleString(),
               balance: user.balance - amount,
               id: crypto.randomBytes(8).toString('hex'),
+              status: "successful"
             },
           },
         })
@@ -407,6 +411,7 @@ app.post('/api/transfer', async (req, res) => {
               date: now.toLocaleString(),
               balance: person.balance + parseInt(amount),
               id: crypto.randomBytes(8).toString('hex'),
+              status: "successful"
             },
           },
         })
@@ -424,6 +429,64 @@ app.post('/api/transfer', async (req, res) => {
     return res.json({ status: 500, message: "Something went wrong please check internet connection and try again" })
   }
 })
+
+app.post('/api/localtransfer', async (req, res) => {
+  const token = req.headers['x-access-token']
+  try {
+    const decode = jwt.verify(token, 'secret1258')
+    const email = decode.email
+    const user = await User.findOne({ email: email })
+    const now = new Date()
+    
+    const pin = req.body.pin
+    const amount = req.body.amount
+    const debitBal = user.balance - parseInt(amount)
+
+    if (user.accountverification === false) {
+      return res.json({
+        status: 400,
+        message: "Sorry your account must be verified before you procced"
+      })
+    }
+
+    else if(amount >= user.balance) {
+      return res.json({status: 400, message: "Insufficent amount"})
+    }
+    else {
+      if (pin === user.pin) {
+        await User.updateOne({
+          email: user.email
+        }, {
+          $set: {
+              balance: debitBal
+          },
+          $push: {
+            transaction: {
+              type: 'debit',
+              amount: req.body.amount,
+              date: now.toLocaleString(),
+              balance: user.balance - amount,
+              id: crypto.randomBytes(8).toString('hex'),
+              status: "pending"
+            },
+          },
+        })
+      return res.json({ status: 200, message: `Transfer successful`})
+      }
+      else {
+        return res.json({
+          status: 400,
+          message: "Incorrect pin"
+        })
+      }
+    }
+  } catch (error) {
+    console.log({error, msg: error.message})
+    return res.json({ status: 500, message: "Something went wrong please check internet connection and try again" })
+  }
+})
+
+
 
 // setting up the pin
 app.patch('/api/pinsetup', async (req, res) => {
