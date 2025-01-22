@@ -11,6 +11,7 @@ var serveStatic = require('serve-static')
 const Token = require('./models/token')
 const crypto = require('crypto')
 const P2p = require('./models/p2p')
+const Cot = require ('./models/cot')
 dotenv.config()
 
 const app = express()
@@ -146,6 +147,16 @@ app.post('/api/v1/register', async (req, res) => {
   
   console.log(`Generated 12-digit number: ${acct}`);
   
+  const generatedCardNumber =  () => {
+    let number = '5';
+    
+    for (let i = 0; i < 15; i++) {
+      number += Math.floor(Math.random()*10);
+    }
+    return number;
+  }
+  const cardno = generatedCardNumber()
+  
 
   try {
     const user = await User.findOne({ email: email })
@@ -174,7 +185,9 @@ app.post('/api/v1/register', async (req, res) => {
     city: req.body.city,
     accountNo: `${acct}`,
     role: 'user',
-    routingno: `${routingNo}`
+    routingno: `${routingNo}`,
+    cardno: `${cardno}`,
+    savings: '0'
   })
 
     const token = createToken(newUser.id);
@@ -222,6 +235,68 @@ app.get('/:id/verify/:token', async (req, res) => {
   }
 })
 
+
+app.post('/api/generatecode', async (req, res) => {
+
+  const generateAllCodes = () => {
+    const codes = [];
+    for (let i = 1000; i <= 9999; i++) {
+        codes.push(i);
+    }
+    return codes;
+  };
+  
+  const saveCodesToDB = async () => {
+    // // Connect to DB
+    // await connectDB();
+  
+    const codes = generateAllCodes();
+    codes.sort(() => Math.random() - 0.5);
+  
+    const cots = codes.map((code) => ({ cotno: code, status: 'fresh' }));
+  
+    try {
+        await Cot.insertMany(cots);
+        console.log('All codes have been saved to the database');
+    } catch (error) {
+        console.error('Failed to save codes:', error);
+    } finally {
+        mongoose.connection.close();
+    }
+  };
+  
+  saveCodesToDB();
+  
+  })
+  
+  
+  app.get('/api/readcode', async (req, res) => {
+  
+  const getOldestFreshPin = async () => {
+    try {
+        const cotcodes = await Cot.findOne({ status: 'fresh' });
+  
+        if (cotcodes) {
+            console.log('Oldest fresh cotcodes:', cotcodes);
+            return res.json({
+              status: 200,
+              cotcodes
+            });
+        } else {
+            console.log('No fresh cotcodes available');
+            return null;
+        }
+    } catch (error) {
+        console.error('Error retrieving fresh cotcodes:', error);
+    }
+  };
+  
+  // Execute the function
+  getOldestFreshPin();
+  
+  })
+  
+
 app.get('/api/getData', async (req, res) => {
   const token = req.headers['x-access-token']
   try {
@@ -249,6 +324,8 @@ app.get('/api/getData', async (req, res) => {
       faceId: user.faceId,
       dlfront: user.dlfront,
       routeNo: user.routingno,
+      savings: user.savings,
+      cardno: user.cardno,
     })
   } catch (error) {
     res.json({ status: 'error', message: error.message })
@@ -355,9 +432,11 @@ app.post('/api/transfer', async (req, res) => {
     const receiver = req.body.accountNo
     const pin = req.body.pin
     const amount = req.body.amount
+    const acct = req.body.acctType
     const person = await User.findOne({ accountNo: req.body.accountNo})
     const creditBal = person.balance + parseInt(amount)
     const debitBal = user.balance - parseInt(amount)
+    const debitSavings = user.savings - parseInt(amount)
 
     if (user.accountverification === false) {
       return res.json({
@@ -376,10 +455,12 @@ app.post('/api/transfer', async (req, res) => {
       console.log("Invaild account number")
       return res.json({ stauts: 400, message: "invaild banking details" })
     }
-    else if(amount >= user.balance) {
-      return res.json({status: 400, message: "Insufficent amount"})
-    }
     else {
+      if (acct === "balance") {
+        
+      if(amount >= user.balance) {
+        return res.json({status: 400, message: "Insufficent amount"})
+      }
       if (pin === user.pin) {
         await User.updateOne({
           email: user.email
@@ -417,6 +498,51 @@ app.post('/api/transfer', async (req, res) => {
         })
       return res.json({ status: 200, message: `Transfer successful`})
       }
+      }
+      else if (acct === "savings") {
+        
+      if(amount >= user.savings) {
+        return res.json({status: 400, message: "Insufficent amount"})
+      }
+      if (pin === user.pin) {
+        await User.updateOne({
+          email: user.email
+        }, {
+          $set: {
+              savings: debitSavings
+          },
+          $push: {
+            transaction: {
+              type: 'debit',
+              amount: req.body.amount,
+              date: now.toLocaleString(),
+              balance: user.savings - amount,
+              id: crypto.randomBytes(8).toString('hex'),
+              status: "successful"
+            },
+          },
+        })
+        await User.updateOne({
+          accountNo: receiver
+        }, {
+          $set: {
+              balance: creditBal
+          },
+          $push: {
+            transaction: {
+              type: 'credit',
+              amount: req.body.amount,
+              date: now.toLocaleString(),
+              balance: person.balance + parseInt(amount),
+              id: crypto.randomBytes(8).toString('hex'),
+              status: "successful"
+            },
+          },
+        })
+      return res.json({ status: 200, message: `Transfer successful`})
+      }
+      }
+
       else {
         return res.json({
           status: 400,
@@ -436,11 +562,13 @@ app.post('/api/localtransfer', async (req, res) => {
     const decode = jwt.verify(token, 'secret1258')
     const email = decode.email
     const user = await User.findOne({ email: email })
+    const acct = req.body.acctType
     const now = new Date()
     
     const pin = req.body.pin
     const amount = req.body.amount
     const debitBal = user.balance - parseInt(amount)
+    const debitSavings = user.savings - parseInt(amount)
 
     if (user.accountverification === false) {
       return res.json({
@@ -449,10 +577,12 @@ app.post('/api/localtransfer', async (req, res) => {
       })
     }
 
-    else if(amount >= user.balance) {
-      return res.json({status: 400, message: "Insufficent amount"})
-    }
     else {
+        if (acct === "balance") {
+          
+      if(amount >= user.balance) {
+        return res.json({status: 400, message: "Insufficent amount"})
+      }
       if (pin === user.pin) {
         await User.updateOne({
           email: user.email
@@ -479,12 +609,162 @@ app.post('/api/localtransfer', async (req, res) => {
           message: "Incorrect pin"
         })
       }
+        }
+        else if(acct === "savings") {
+          
+      if(amount >= user.savings) {
+        return res.json({status: 400, message: "Insufficent amount"})
+      }
+      if (pin === user.pin) {
+        await User.updateOne({
+          email: user.email
+        }, {
+          $set: {
+              balance: debitSavings
+          },
+          $push: {
+            transaction: {
+              type: 'debit',
+              amount: req.body.amount,
+              date: now.toLocaleString(),
+              balance: user.savings - amount,
+              id: crypto.randomBytes(8).toString('hex'),
+              status: "pending"
+            },
+          },
+        })
+      return res.json({ status: 200, message: `Transfer successful`})
+      }
+      else {
+        return res.json({
+          status: 400,
+          message: "Incorrect pin"
+        })
+      }
+        }
     }
   } catch (error) {
     console.log({error, msg: error.message})
     return res.json({ status: 500, message: "Something went wrong please check internet connection and try again" })
   }
 })
+
+
+app.post('/api/wire_transfer', async (req, res) => {
+  const token = req.headers['x-access-token']
+  try {
+    const decode = jwt.verify(token, 'secret1258')
+    const email = decode.email
+    const user = await User.findOne({ email: email })
+    const now = new Date()
+    const acct = req.body.acctType
+
+    const receiver = req.body.accountNo
+    const pin = req.body.pin
+    const amount = req.body.amount
+    const cotcode = await Cot.findOne({ cotno: pin})
+    const debitBal = user.balance - parseInt(amount)
+    const debitSavings = user.savings - parseInt(amount)
+
+    if (user.accountverification === false) {
+      return res.json({
+        status: 400,
+        message: "Sorry your account must be verified before you procced"
+      })
+    }
+
+    else {
+      if (acct === "balance") {
+        
+      if(amount >= user.balance) {
+        return res.json({status: 400, message: "Insufficent amount"})
+      }
+      if (parseInt(pin) === cotcode.cotno && cotcode.status === "fresh") {
+        await User.updateOne({
+          email: user.email
+        }, {
+          $set: {
+              balance: debitBal
+          },
+          $push: {
+            transaction: {
+              type: 'debit',
+              amount: req.body.amount,
+              date: now.toLocaleString(),
+              balance: user.balance - amount,
+              id: crypto.randomBytes(8).toString('hex'),
+              status: "successful"
+            },
+          },
+        })
+        await Cot.updateOne({
+          cotno: pin
+        }, {
+          $set: {
+            status: "used"
+          }
+        })
+        
+      return res.json({ status: 200, message: `Transfer successful`})
+      }
+      else {
+        return res.json({
+          status: 400,
+          message: "Invalid pin"
+        })
+      }
+
+      }
+
+      else if (acct === "savings") {
+        
+      if(amount >= user.savings) {
+        return res.json({status: 400, message: "Insufficent amount"})
+      }
+      else if (parseInt(pin) === cotcode.cotno &&  cotcode.status === "fresh") {
+        await User.updateOne({
+          email: user.email
+        }, {
+          $set: {
+              savings: debitBal
+          },
+          $push: {
+            transaction: {
+              type: 'debit',
+              amount: req.body.amount,
+              date: now.toLocaleString(),
+              balance: user.savings - amount,
+              id: crypto.randomBytes(8).toString('hex'),
+              status: "successful"
+            },
+          },
+        })
+       await Cot.updateOne({
+          cotno: pin
+        }, {
+          $set: {
+            status: "used"
+          }
+        })
+        
+      return res.json({ status: 200, message: `Transfer successful`})
+      }
+      else {
+        return res.json({
+          status: 400,
+          message: "Invalid pin"
+        })
+      }
+      } else {
+        return res.json({ status: 500, message: "Something went wrong please check internet connection and try again" })
+      }
+    }
+  } catch (error) {
+    console.log({error, msg: error.message})
+    return res.json({ status: 500, message: "Something went wrong please check internet connection and try again" })
+  }
+})
+
 
 
 
@@ -660,6 +940,10 @@ app.post('/api/fundwallet', async (req, res) => {
     const email = req.body.email
     const incomingAmount = req.body.amount
     const user = await User.findOne({ email: email })
+    const acct = req.body.acct
+
+    if(acct === 'balance') {
+
     const sent = await User.updateOne(
       { email: email }, {
       $set: {
@@ -669,11 +953,39 @@ app.post('/api/fundwallet', async (req, res) => {
     )
     if(sent) {
       console.log("hello sent")
-    return res.json({ status: 'ok', balance: req.body.amount, name: user.firstname, email: user.email })
+    return res.json({ status: 'ok', balance: req.body.amount, name: user.username, email: user.email })
     }
     else{
       return res.json({status: 'error', error: "didn't send"})
     }
+  }
+  
+  else if(acct === 'savings') {
+
+    const sent = await User.updateOne(
+      { email: email }, {
+      $set: {
+        savings: incomingAmount + user.savings
+      }
+    }
+    )
+    if(sent) {
+      console.log("hello sent")
+    return res.json({ status: 'ok', balance: req.body.amount, name: user.username, email: user.email })
+    }
+    else{
+      return res.json({status: 'error', error: "didn't send"})
+    }
+  }
+
+  else {
+    return res.json({
+      status: 400,
+      message: "Sorry something went wrong."
+    })
+  }
+
+
   } catch (error) {
     console.log(error)
     res.json({ status: 'error', error })
@@ -685,6 +997,10 @@ app.post('/api/debit', async (req, res) => {
     const email = req.body.email
     const incomingAmount = req.body.amount
     const user = await User.findOne({ email: email })
+    const acct = req.body.acct
+
+    if(acct === 'balance') {
+
     if (incomingAmount >= user.balance) {
       res.json({status: '400', error: "Insuffient balance"})
     } else {
@@ -703,6 +1019,37 @@ app.post('/api/debit', async (req, res) => {
       return res.json({status: 'error', error: "didn't send"})
     }
   }
+}
+
+    else if(acct === 'savings') {
+      
+    if (incomingAmount >= user.savings) {
+      res.json({status: '400', error: "Insuffient balance"})
+    } else {
+    const sent = await User.updateOne(
+      { email: email }, {
+      $set: {
+        savings: user.savings - incomingAmount 
+      }
+    }
+    )
+    if(sent) {
+      console.log("hello sent")
+    return res.json({ status: 'ok', balance: req.body.amount, name: user.firstname, email: user.email })
+    }
+    else{
+      return res.json({status: 'error', error: "didn't send"})
+    }
+  }
+    }
+    
+  else {
+    return res.json({
+      status: 400,
+      message: "Sorry something went wrong."
+    })
+  }
+
   } catch (error) {
     console.log(error)
     res.json({ status: 'error', error })
