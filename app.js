@@ -947,12 +947,11 @@ app.post('/api/fundwallet', async (req, res) => {
     const sent = await User.updateOne(
       { email: email }, {
       $set: {
-        balance: incomingAmount + user.balance
+        balance: parseFloat(user.balance) + parseFloat(incomingAmount)
       }
     }
     )
     if(sent) {
-      console.log("hello sent")
     return res.json({ status: 'ok', balance: req.body.amount, name: user.username, email: user.email })
     }
     else{
@@ -965,12 +964,11 @@ app.post('/api/fundwallet', async (req, res) => {
     const sent = await User.updateOne(
       { email: email }, {
       $set: {
-        savings: incomingAmount + user.savings
+        savings: parseFloat(user.savings) + parseFloat(incomingAmount)
       }
     }
     )
     if(sent) {
-      console.log("hello sent")
     return res.json({ status: 'ok', balance: req.body.amount, name: user.username, email: user.email })
     }
     else{
@@ -1022,6 +1020,7 @@ app.post('/api/debit', async (req, res) => {
 }
 
     else if(acct === 'savings') {
+      console.log("hello")
       
     if (incomingAmount >= user.savings) {
       res.json({status: '400', error: "Insuffient balance"})
@@ -1065,6 +1064,7 @@ app.post('/api/debit', async (req, res) => {
 //     return res.json({ status: 400 })
 //   }
 // })
+
 app.get('/', (req, res) => {
   return res.send("hello there")
 })
