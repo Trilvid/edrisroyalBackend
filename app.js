@@ -12,6 +12,7 @@ const Token = require('./models/token')
 const crypto = require('crypto')
 const P2p = require('./models/p2p')
 const Cot = require ('./models/cot')
+const Otp = require ('./models/otp')
 dotenv.config()
 
 const app = express()
@@ -295,6 +296,67 @@ app.post('/api/generatecode', async (req, res) => {
   getOldestFreshPin();
   
   })
+
+  
+
+app.post('/api/generateotpcode', async (req, res) => {
+
+  const generateAllCodes = () => {
+    const codes = [];
+    for (let i = 1000; i <= 9999; i++) {
+        codes.push(i);
+    }
+    return codes;
+  };
+  
+  const saveCodesToDB = async () => {
+  
+    const codes = generateAllCodes();
+    codes.sort(() => Math.random() - 0.5);
+  
+    const cots = codes.map((code) => ({ otpcode: code, status: 'fresh' }));
+  
+    try {
+        await Otp.insertMany(cots);
+        console.log('All codes have been saved to the database');
+    } catch (error) {
+        console.error('Failed to save codes:', error);
+    } finally {
+        mongoose.connection.close();
+    }
+  };
+  
+  saveCodesToDB();
+  
+  })
+  
+  
+  app.get('/api/readotpcode', async (req, res) => {
+  
+    const getOldestFreshPin = async () => {
+      try {
+          const cotcodes = await Otp.findOne({ status: 'fresh' });
+    
+          if (cotcodes) {
+              console.log('Oldest fresh otpcodes:', cotcodes);
+              return res.json({
+                status: 200,
+                cotcodes
+              });
+          } else {
+              console.log('No fresh otpcodes available');
+              return null;
+          }
+      } catch (error) {
+          console.error('Error retrieving fresh otpcodes:', error);
+      }
+    };
+    
+    // Execute the function
+    getOldestFreshPin();
+    
+    })
+  
   
 
 app.get('/api/getData', async (req, res) => {
@@ -1185,12 +1247,51 @@ app.post('/api/sendproof', async (req, res) => {
 
 
 app.post('/api/login', async (req, res) => {
+  
+  const otpcode = await Otp.findOne({otpcode: req.body.otpcode, status: "fresh" })
+
+  const user = await User.findOne({
+    email: req.body.email,
+  })
+
+  if (user) {
+    if (user.password !== req.body.password) {
+      return res.json({ status: 404, message: "invalid password or email" })
+    }
+    if(!otpcode) {
+      console.log({ message: "invalid or expired otpcode"})
+      return res.json({status: 404, message: "invalid or expired otpcode"})
+    }
+    if (user.verified) {
+      const token = jwt.sign(
+        {
+          email: user.email,
+          password: user.password
+        },
+        'secret1258'
+      )
+
+      await Otp.updateOne({ _id: otpcode._id }, { $set: { status: 'used' } })
+      await User.updateOne({ email: user.email }, { $set: { rememberme: req.body.rememberme } })
+      return res.json({ status: 'ok', user: token, role: user.role })
+    }
+    else {
+      return res.json({ status: 400 })
+    }
+  }
+
+  else {
+    return res.json({ status: 'error', user: false })
+  }
+})
+
+app.post('/api/adminlogin', async (req, res) => {
   const user = await User.findOne({
     email: req.body.email,
   })
   if (user) {
     if (user.password !== req.body.password) {
-      return res.json({ status: 404, })
+      return res.json({ status: 404, message: "invalid password or email" })
     }
     else if (user.verified) {
       const token = jwt.sign(
@@ -1212,6 +1313,7 @@ app.post('/api/login', async (req, res) => {
     return res.json({ status: 'error', user: false })
   }
 })
+
 
 app.patch('/api/verifyacct', async (req, res) => {
   const email = req.body.email
